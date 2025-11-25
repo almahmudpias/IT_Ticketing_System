@@ -20,6 +20,27 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus();
   }, []);
 
+  // Helper function to get dashboard path based on role
+  const getDashboardPath = (userRole) => {
+    switch (userRole) {
+      case 'super_admin':
+        return '/super-admin';
+      case 'admin':
+        return '/admin';
+      case 'it_staff':
+        return '/it-staff';
+      case 'front_desk':
+        return '/front-desk';
+      case 'lab_instructor':
+        return '/lab-instructor';
+      case 'student':
+      case 'faculty':
+      case 'staff':
+      default:
+        return '/dashboard';
+    }
+  };
+
   const checkAuthStatus = async () => {
     try {
       const token = localStorage.getItem('nsu_ticket_token');
@@ -28,7 +49,7 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
       }
     } catch (error) {
-      console.error('Auth check failed:', error.message);
+      console.error('Auth check failed:', error);
       localStorage.removeItem('nsu_ticket_token');
       setUser(null);
     } finally {
@@ -37,14 +58,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const login = async (identifier, password) => {
     try {
       setLoading(true);
-      const response = await userService.login(email, password);
+      const response = await userService.login(identifier, password);
       const { user: userData, token } = response;
       
       localStorage.setItem('nsu_ticket_token', token);
       setUser(userData);
+      
+      // Get the appropriate dashboard path and redirect
+      const dashboardPath = getDashboardPath(userData.role);
+      
+      // Use setTimeout to ensure state is updated before redirect
+      setTimeout(() => {
+        window.location.href = dashboardPath;
+      }, 100);
       
       return { success: true, user: userData };
     } catch (error) {
@@ -56,13 +85,30 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    userService.logout();
+    localStorage.removeItem('nsu_ticket_token');
     setUser(null);
+    window.location.href = '/login';
+  };
+
+  const hasPermission = (requiredPermission) => {
+    if (!user) return false;
+    if (user.role === 'super_admin') return true;
+    
+    const rolePermissions = {
+      admin: ['manage_tickets', 'assign_tickets', 'view_reports', 'manage_users'],
+      front_desk: ['create_tickets', 'view_tickets', 'assign_tickets'],
+      it_staff: ['view_assigned_tickets', 'update_tickets', 'add_comments'],
+      lab_instructor: ['create_tickets', 'view_tickets', 'lab_requests'],
+      user: ['create_tickets', 'view_own_tickets']
+    };
+
+    const permissions = rolePermissions[user.role] || [];
+    return permissions.includes(requiredPermission);
   };
 
   const hasRole = (requiredRoles) => {
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (user.role === 'super_admin') return true;
     return requiredRoles.includes(user.role);
   };
 
@@ -72,8 +118,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     loading,
     hasRole,
+    hasPermission,
     authChecked,
-    checkAuthStatus
+    getDashboardPath // Export this for use in other components
   };
 
   return (

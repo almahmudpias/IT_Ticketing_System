@@ -1,10 +1,10 @@
 import { format, differenceInHours, parseISO } from 'date-fns';
 
 export const slaConfig = {
-  critical: 2,    // 2 hours
-  high: 4,        // 4 hours
-  medium: 8,      // 8 hours
-  low: 24         // 24 hours
+  critical: 2,
+  high: 4,
+  medium: 8,
+  low: 24
 };
 
 export const calculateSLAStatus = (ticket) => {

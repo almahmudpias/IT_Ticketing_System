@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/userService';
 import { 
@@ -8,10 +8,9 @@ import {
   Server, LayoutGrid, UserCircle
 } from 'lucide-react';
 
-const Login = () => {
+const EnhancedLogin = () => {
   const { user, login } = useAuth();
-  const navigate = useNavigate();
-  const [step, setStep] = useState('email');
+  const [step, setStep] = useState('email'); // email → password → otp (if new user)
   const [formData, setFormData] = useState({
     identifier: '',
     password: '',
@@ -25,114 +24,97 @@ const Login = () => {
   const [activeField, setActiveField] = useState('');
 
   // Redirect based on user role
-  if (user) {
-    let redirectPath = '/dashboard';
-    switch (user.role) {
-      case 'super_admin':
-        redirectPath = '/super-admin';
-        break;
-      case 'admin':
-        redirectPath = '/admin';
-        break;
-      case 'it_staff':
-        redirectPath = '/it-staff';
-        break;
-      case 'front_desk':
-        redirectPath = '/front-desk';
-        break;
-      case 'lab_instructor':
-        redirectPath = '/lab-instructor';
-        break;
-      case 'student':
-      case 'faculty':
-      case 'staff':
-      default:
-        redirectPath = '/dashboard';
-    }
-    return <Navigate to={redirectPath} replace />;
+  // In the redirect section, replace with:
+if (user) {
+  let redirectPath = '/dashboard'; // Default for students, faculty, staff
+  
+  switch (user.role) {
+    case 'super_admin':
+      redirectPath = '/super-admin';
+      break;
+    case 'admin':
+      redirectPath = '/admin';
+      break;
+    case 'it_staff':
+      redirectPath = '/it-staff';
+      break;
+    case 'front_desk':
+      redirectPath = '/front-desk';
+      break;
+    case 'lab_instructor':
+      redirectPath = '/lab-instructor';
+      break;
+    case 'student':
+    case 'faculty':
+    case 'staff':
+    default:
+      redirectPath = '/dashboard';
   }
-
+  
+  return <Navigate to={redirectPath} replace />;
+}
   // Step 1: Check if user exists
   const handleEmailSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.identifier) {
-      setError('Please enter your email or faculty ID');
-      return;
-    }
+  e.preventDefault();
+  setLoading(true);
+  setError('');
 
-    setLoading(true);
-    setError('');
+  try {
+    // Check if user exists by trying to login with a dummy password
+    // This is a mock implementation - in real system, you'd have a dedicated endpoint
+    const mockUsers = [
+      'student@northsouth.edu',
+      'staff@northsouth.edu', 
+      'frontdesk@northsouth.edu',
+      'itstaff@northsouth.edu',
+      'admin@northsouth.edu',
+      'lab.cs@northsouth.edu',
+      'prof.ahmed@northsouth.edu',
+      'superadmin@northsouth.edu'
+    ];
 
-    try {
-      // First, try to check if user exists
-      try {
-        const userInfo = await userService.checkUserExists(formData.identifier);
-        
-        if (userInfo.exists) {
-          setUserExists(true);
-          setStep('password');
-        } else {
-          // User doesn't exist, try OTP flow for new users
-          try {
-            await userService.requestOTP(formData.identifier);
-            setUserExists(false);
-            setStep('otp');
-          } catch (otpError) {
-            setError(otpError.message || 'Failed to send OTP. Please try again.');
-          }
-        }
-      } catch (checkError) {
-        // If checkUserExists endpoint doesn't exist or fails,
-        // try a different approach - attempt OTP first for new users
-        console.log('User check failed, trying OTP approach:', checkError);
-        
-        try {
-          // Try to request OTP first (this should work for new users)
-          await userService.requestOTP(formData.identifier);
-          setUserExists(false);
-          setStep('otp');
-        } catch (otpError) {
-          // If OTP request fails with "user already exists" or similar, go to password
-          if (otpError.message?.includes('already exists') || 
-              otpError.message?.includes('registered') ||
-              otpError.status === 409) {
-            setUserExists(true);
-            setStep('password');
-          } else if (otpError.status === 404 || otpError.message?.includes('not found')) {
-            setError('User not found. Please check your email or contact support.');
-          } else {
-            // For other errors, assume user exists and fall back to password
-            setUserExists(true);
-            setStep('password');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Login flow error:', error);
-      // Final fallback - show password step
+    const userExists = mockUsers.includes(formData.identifier) || 
+                      formData.identifier === 'FAC001'; // Faculty ID check
+
+    if (userExists) {
+      // Existing user - go to password step
       setUserExists(true);
       setStep('password');
-    } finally {
-      setLoading(false);
+    } else {
+      // New user - send OTP
+      try {
+        await userService.requestOTP(formData.identifier);
+        setUserExists(false);
+        setStep('otp');
+      } catch (otpError) {
+        setError(otpError.message);
+      }
     }
-  };
+  } catch (error) {
+    setError('Failed to check user account. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Step 2: Login with password (existing users)
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
-    if (!formData.password) {
-      setError('Please enter your password');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
-      await login(formData.identifier, formData.password);
-      // The AuthContext will handle setting the user and redirect
+      const result = await login(formData.identifier, formData.password);
+      if (!result.success) {
+        setError(result.error);
+      } else {
+        // Force immediate redirect after successful login
+        setTimeout(() => {
+          window.location.href = '/student';
+        }, 100);
+      }
     } catch (error) {
-      setError(error.message || 'Login failed. Please check your credentials.');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -141,16 +123,6 @@ const Login = () => {
   // Step 3: Verify OTP and create account (new users)
   const handleOTPVerification = async (e) => {
     e.preventDefault();
-    if (!formData.otp || !formData.newPassword) {
-      setError('Please enter both OTP and new password');
-      return;
-    }
-
-    if (formData.newPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
@@ -161,10 +133,11 @@ const Login = () => {
         formData.newPassword
       );
       
-      // Login with the new credentials
-      await login(formData.identifier, formData.newPassword);
+      localStorage.setItem('nsu_ticket_token', result.token);
+      // Force page reload to trigger auth context update
+      window.location.href = '/student';
     } catch (error) {
-      setError(error.message || 'Account creation failed. Please try again.');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -174,40 +147,27 @@ const Login = () => {
     if (step === 'password' || step === 'otp') {
       setStep('email');
       setError('');
-      setFormData(prev => ({ ...prev, password: '', otp: '', newPassword: '' }));
     }
+  };
+
+  const resetFlow = () => {
+    setStep('email');
+    setFormData({ identifier: '', password: '', otp: '', newPassword: '' });
+    setError('');
+    setUserExists(null);
   };
 
   const demoCredentials = [
-    { email: 'student@northsouth.edu', password: 'password', role: 'Student', color: 'bg-blue-100 text-blue-700' },
-    { email: 'staff@northsouth.edu', password: 'password', role: 'Staff', color: 'bg-purple-100 text-purple-700' },
-    { email: 'frontdesk@northsouth.edu', password: 'password', role: 'Front Desk', color: 'bg-pink-100 text-pink-700' },
-    { email: 'itstaff1@northsouth.edu', password: 'password', role: 'IT Staff 1', color: 'bg-amber-100 text-amber-700' },
-    { email: 'itstaff2@northsouth.edu', password: 'password', role: 'IT Staff 2', color: 'bg-amber-100 text-amber-700' },
-    { email: 'admin@northsouth.edu', password: 'password', role: 'Admin', color: 'bg-emerald-100 text-emerald-700' },
-    { email: 'superadmin@northsouth.edu', password: 'password', role: 'Super Admin', color: 'bg-red-100 text-red-700' },
-    { email: 'lab.cs@northsouth.edu', password: 'password', role: 'Lab Instructor', color: 'bg-orange-100 text-orange-700' }
+    { email: 'student@northsouth.edu', role: 'Student', color: 'bg-blue-100 text-blue-700' },
+    { email: 'staff@northsouth.edu', role: 'Staff', color: 'bg-purple-100 text-purple-700' },
+    { email: 'frontdesk@northsouth.edu', role: 'Front Desk', color: 'bg-pink-100 text-pink-700' },
+    { email: 'itstaff@northsouth.edu', role: 'IT Staff', color: 'bg-amber-100 text-amber-700' },
+    { email: 'admin@northsouth.edu', role: 'Admin', color: 'bg-emerald-100 text-emerald-700' },
+    { email: 'lab.cs@northsouth.edu', role: 'Lab Instructor', color: 'bg-orange-100 text-orange-700' }
   ];
 
-  // Quick login for demo (bypasses all checks)
-  const handleQuickLogin = async (email, password) => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      await login(email, password);
-    } catch (error) {
-      setError(error.message || 'Quick login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Test function to simulate new user detection
-  const simulateNewUser = () => {
-    setFormData(prev => ({ ...prev, identifier: 'newuser@northsouth.edu' }));
-    setUserExists(false);
-    setStep('otp');
+  const fillDemoCredentials = (email) => {
+    setFormData(prev => ({ ...prev, identifier: email, password: 'password' }));
     setError('');
   };
 
@@ -293,8 +253,7 @@ const Login = () => {
           {(step === 'password' || step === 'otp') && (
             <button
               onClick={goBack}
-              className="flex items-center text-gray-600 hover:text-gray-800 mb-4 transition-colors"
-              type="button"
+              className="flex items-center text-gray-600 hover:text-gray-800 mb-4"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to email
@@ -314,7 +273,7 @@ const Login = () => {
 
           {/* Error Display */}
           {error && (
-            <div className="p-4 rounded-lg bg-red-50 border border-red-100 flex items-start gap-3">
+            <div className="p-4 rounded-lg bg-red-50 border border-red-100 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
               <Shield className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
               <p className="text-sm text-red-700 font-medium">{error}</p>
             </div>
@@ -377,20 +336,18 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {demoCredentials.map((cred, index) => (
                   <button
                     key={index}
                     type="button"
-                    onClick={() => handleQuickLogin(cred.email, cred.password)}
-                    className={`p-2 rounded-lg border border-transparent hover:border-gray-200 hover:shadow-sm transition-all text-left bg-white hover:bg-gray-50`}
-                    disabled={loading}
+                    onClick={() => fillDemoCredentials(cred.email)}
+                    className={`p-2 rounded-lg border border-transparent hover:border-gray-200 hover:shadow-sm transition-all text-left ${index >= 3 ? 'sm:col-span-1' : ''}`}
                   >
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${cred.color}`}>
                       <UserCircle className="h-5 w-5" />
                     </div>
                     <div className="text-xs font-bold text-gray-700">{cred.role}</div>
-                    <div className="text-xs text-gray-500 truncate">{cred.email}</div>
                   </button>
                 ))}
               </div>
@@ -413,9 +370,7 @@ const Login = () => {
                 <div className="relative group">
                   <div className="flex justify-between items-center mb-1 ml-1">
                     <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <button type="button" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                      Forgot password?
-                    </button>
+                    <a href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-800">Forgot password?</a>
                   </div>
                   <div className={`relative transition-all duration-300 transform ${activeField === 'password' ? 'scale-[1.02]' : ''}`}>
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -448,33 +403,8 @@ const Login = () => {
                 disabled={loading}
                 className="w-full bg-nsu-blue text-white py-3.5 px-4 rounded-xl hover:bg-blue-800 font-bold transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-70 disabled:transform-none"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Signing in...
-                  </span>
-                ) : (
-                  'Sign In to Account'
-                )}
+                {loading ? 'Signing in...' : 'Sign In to Account'}
               </button>
-
-              {/* Quick Login Buttons for Password Step */}
-              <div className="grid grid-cols-2 gap-2">
-                {demoCredentials.slice(0, 4).map((cred, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => handleQuickLogin(cred.email, cred.password)}
-                    className="p-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                    disabled={loading}
-                  >
-                    Login as {cred.role}
-                  </button>
-                ))}
-              </div>
             </form>
           )}
 
@@ -538,17 +468,6 @@ const Login = () => {
               >
                 {loading ? 'Creating Account...' : 'Create Account & Sign In'}
               </button>
-
-              {/* Resend OTP option */}
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => userService.requestOTP(formData.identifier)}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                >
-                  Didn't receive code? Resend OTP
-                </button>
-              </div>
             </form>
           )}
         </div>
@@ -557,4 +476,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default EnhancedLogin;

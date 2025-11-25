@@ -7,31 +7,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-        },
-        nsu: {
-          blue: '#0033A0',
-          red: '#D21034',
-          gold: '#FFD700'
-        }
-      },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        'nsu-blue': '#003366',
       },
       animation: {
-        'pulse-slow': 'pulse 3s linear infinite',
-        'bounce-slow': 'bounce 2s infinite',
+        'blob': 'blob 7s infinite',
+        'slide-in': 'slideIn 0.5s ease-out',
+      },
+      keyframes: {
+        blob: {
+          '0%': { transform: 'translate(0px, 0px) scale(1)' },
+          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+          '100%': { transform: 'translate(0px, 0px) scale(1)' },
+        },
+        slideIn: {
+          '0%': { transform: 'translateY(100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        }
       }
     },
   },
+  plugins: [],
 }

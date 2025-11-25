@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { ticketService } from '../services/ticketService';
+import { useAuth } from './AuthContext';
 
 const TicketContext = createContext();
 
@@ -15,11 +16,6 @@ const ticketReducer = (state, action) => {
         tickets: state.tickets.map(ticket =>
           ticket.id === action.payload.id ? action.payload : ticket
         )
-      };
-    case 'DELETE_TICKET':
-      return {
-        ...state,
-        tickets: state.tickets.filter(ticket => ticket.id !== action.payload)
       };
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
@@ -39,16 +35,9 @@ const initialState = {
     status: '',
     priority: '',
     category: '',
-    assignee: '',
-    dateRange: ''
+    search: ''
   },
-  loading: true,
-  stats: {
-    total: 0,
-    open: 0,
-    resolved: 0,
-    overdue: 0
-  }
+  loading: true
 };
 
 export const useTickets = () => {
@@ -61,21 +50,20 @@ export const useTickets = () => {
 
 export const TicketProvider = ({ children }) => {
   const [state, dispatch] = useReducer(ticketReducer, initialState);
+  const { user } = useAuth();
 
   const fetchTickets = async (filters = {}) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      const data = await ticketService.getTickets(filters);
+      
+      // Add user-based filtering
+      const queryFilters = { ...state.filters, ...filters };
+      if (user && !['admin', 'super_admin', 'it_staff', 'front_desk'].includes(user.role)) {
+        queryFilters.userId = user.id;
+      }
+
+      const data = await ticketService.getTickets(queryFilters);
       dispatch({ type: 'SET_TICKETS', payload: data.tickets || [] });
-      
-      // Calculate stats
-      const stats = {
-        total: data.tickets.length,
-        open: data.tickets.filter(t => t.status !== 'resolved' && t.status !== 'closed').length,
-        resolved: data.tickets.filter(t => t.status === 'resolved').length,
-        overdue: data.tickets.filter(t => t.slaStatus === 'breached').length
-      };
-      
     } catch (error) {
       console.error('Failed to fetch tickets:', error);
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -102,35 +90,6 @@ export const TicketProvider = ({ children }) => {
     }
   };
 
-  const bulkUpdateTickets = async (ticketIds, updates) => {
-    try {
-      await ticketService.bulkUpdateTickets(ticketIds, updates);
-      await fetchTickets(state.filters);
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const assignTicket = async (ticketId, assigneeId) => {
-    try {
-      const updatedTicket = await ticketService.assignTicket(ticketId, assigneeId);
-      dispatch({ type: 'UPDATE_TICKET', payload: updatedTicket });
-      return updatedTicket;
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const addNote = async (ticketId, note, isInternal = false) => {
-    try {
-      const updatedTicket = await ticketService.addNote(ticketId, note, isInternal);
-      dispatch({ type: 'UPDATE_TICKET', payload: updatedTicket });
-      return updatedTicket;
-    } catch (error) {
-      throw error;
-    }
-  };
-
   const setFilters = (filters) => {
     dispatch({ type: 'SET_FILTERS', payload: filters });
   };
@@ -149,30 +108,20 @@ export const TicketProvider = ({ children }) => {
     setSelectedTickets(newSelected);
   };
 
-  const selectAllTickets = (ticketIds) => {
-    if (state.selectedTickets.size === ticketIds.length) {
-      setSelectedTickets(new Set());
-    } else {
-      setSelectedTickets(new Set(ticketIds));
-    }
-  };
-
   useEffect(() => {
-    fetchTickets(state.filters);
-  }, [state.filters]);
+    if (user) {
+      fetchTickets();
+    }
+  }, [user]);
 
   const value = {
     ...state,
     fetchTickets,
     createTicket,
     updateTicket,
-    bulkUpdateTickets,
-    assignTicket,
-    addNote,
     setFilters,
     setSelectedTickets,
-    toggleTicketSelection,
-    selectAllTickets
+    toggleTicketSelection
   };
 
   return (
